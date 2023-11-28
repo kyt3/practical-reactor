@@ -1,6 +1,12 @@
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.*;
+import java.time.Duration;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import reactor.blockhound.BlockHound;
 import reactor.core.Exceptions;
 import reactor.core.Scannable;
@@ -9,12 +15,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.NonBlocking;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
-
-import java.time.Duration;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * With multi-core architectures being a commodity nowadays, being able to easily parallelize work is important.
@@ -48,6 +48,7 @@ public class c9_ExecutionControl extends ExecutionControlBase {
         long threadId = Thread.currentThread().getId();
         Flux<String> notifications = readNotifications()
                 .doOnNext(System.out::println)
+                .delayElements(Duration.ofSeconds(1))
                 //todo: change this line only
                 ;
 
@@ -77,8 +78,9 @@ public class c9_ExecutionControl extends ExecutionControlBase {
     public void ready_set_go() {
         //todo: feel free to change code as you need
         Flux<String> tasks = tasks()
-                .flatMap(Function.identity());
-        semaphore();
+                .delayElements(Duration.ofMillis(3000))
+                .flatMap(Function.identity())
+                ;
 
         //don't change code below
         StepVerifier.create(tasks)
@@ -100,12 +102,13 @@ public class c9_ExecutionControl extends ExecutionControlBase {
     @Test
     public void non_blocking() {
         Mono<Void> task = Mono.fromRunnable(() -> {
-                                  Thread currentThread = Thread.currentThread();
-                                  assert NonBlocking.class.isAssignableFrom(Thread.currentThread().getClass());
-                                  System.out.println("Task executing on: " + currentThread.getName());
-                              })
-                              //todo: change this line only
-                              .then();
+                    Thread currentThread = Thread.currentThread();
+                    assert NonBlocking.class.isAssignableFrom(Thread.currentThread().getClass());
+                    System.out.println("Task executing on: " + currentThread.getName());
+                })
+                .publishOn(Schedulers.parallel())
+                //todo: change this line only
+                .then();
 
         StepVerifier.create(task)
                     .verifyComplete();
@@ -121,8 +124,8 @@ public class c9_ExecutionControl extends ExecutionControlBase {
         BlockHound.install(); //don't change this line
 
         Mono<Void> task = Mono.fromRunnable(ExecutionControlBase::blockingCall)
-                              .subscribeOn(Schedulers.single())//todo: change this line only
-                              .then();
+                .subscribeOn(Schedulers.boundedElastic())//todo: change this line only
+                .then();
 
         StepVerifier.create(task)
                     .verifyComplete();
@@ -134,10 +137,12 @@ public class c9_ExecutionControl extends ExecutionControlBase {
     @Test
     public void free_runners() {
         //todo: feel free to change code as you need
-        Mono<Void> task = Mono.fromRunnable(ExecutionControlBase::blockingCall);
+        Mono<Void> task = Mono.fromRunnable(ExecutionControlBase::blockingCall).publishOn(Schedulers.boundedElastic())
+                .then();
 
         Flux<Void> taskQueue = Flux.just(task, task, task)
-                                   .concatMap(Function.identity());
+                .flatMap(Function.identity())
+                ;
 
         //don't change code below
         Duration duration = StepVerifier.create(taskQueue)
@@ -154,7 +159,7 @@ public class c9_ExecutionControl extends ExecutionControlBase {
     public void sequential_free_runners() {
         //todo: feel free to change code as you need
         Flux<String> tasks = tasks()
-                .flatMap(Function.identity());
+                .flatMapSequential(Function.identity());
         ;
 
         //don't change code below
@@ -176,9 +181,12 @@ public class c9_ExecutionControl extends ExecutionControlBase {
     public void event_processor() {
         //todo: feel free to change code as you need
         Flux<String> eventStream = eventProcessor()
+                .parallel()
                 .filter(event -> event.metaData.length() > 0)
                 .doOnNext(event -> System.out.println("Mapping event: " + event.metaData))
                 .map(this::toJson)
+                .runOn(Schedulers.boundedElastic())
+                .sequential()
                 .concatMap(n -> appendToStore(n).thenReturn(n));
 
         //don't change code below
