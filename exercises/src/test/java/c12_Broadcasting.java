@@ -1,9 +1,9 @@
-import org.junit.jupiter.api.*;
-import reactor.core.publisher.Flux;
-import reactor.test.StepVerifier;
-
 import java.util.Arrays;
 import java.util.concurrent.CopyOnWriteArrayList;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 
 /**
  * In this chapter we will learn difference between hot and cold publishers,
@@ -32,6 +32,7 @@ public class c12_Broadcasting extends BroadcastingBase {
     @Test
     public void sharing_is_caring() throws InterruptedException {
         Flux<Message> messages = messageStream()
+                .share()
                 //todo: do your changes here
                 ;
 
@@ -59,7 +60,7 @@ public class c12_Broadcasting extends BroadcastingBase {
      */
     @Test
     public void hot_vs_cold() {
-        Flux<String> updates = systemUpdates()
+        Flux<String> updates = systemUpdates().replay(0).autoConnect()
                 //todo: do your changes here
                 ;
 
@@ -81,7 +82,7 @@ public class c12_Broadcasting extends BroadcastingBase {
      */
     @Test
     public void history_lesson() {
-        Flux<String> updates = systemUpdates()
+        Flux<String> updates = systemUpdates().replay().autoConnect()
                 //todo: do your changes here
                 ;
 
