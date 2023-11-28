@@ -1,11 +1,11 @@
-import org.junit.jupiter.api.*;
+import java.time.Duration;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
-
-import java.time.Duration;
-import java.util.List;
+import reactor.util.concurrent.Queues;
 
 /**
  * In Reactor a Sink allows safe manual triggering of signals. We will learn more about multicasting and backpressure in
@@ -34,11 +34,7 @@ public class c8_Sinks extends SinksBase {
     @Test
     public void single_shooter() {
         //todo: feel free to change code as you need
-        Mono<Boolean> operationCompleted = null;
-        submitOperation(() -> {
-
-            doSomeWork(); //don't change this line
-        });
+        Mono<Boolean> operationCompleted = Mono.fromRunnable(() ->submitOperation(() -> doSomeWork())).then(Mono.just(true));
 
         //don't change code below
         StepVerifier.create(operationCompleted.timeout(Duration.ofMillis(5500)))
@@ -55,10 +51,16 @@ public class c8_Sinks extends SinksBase {
     @Test
     public void single_subscriber() {
         //todo: feel free to change code as you need
-        Flux<Integer> measurements = null;
-        submitOperation(() -> {
+        Flux<Integer> measurements = Flux.create(integerFluxSink -> {
+            Mono.fromRunnable(() -> submitOperation(() -> {
+                List<Integer> measures_readings = get_measures_readings(); //don't change this line
+                for (Integer integer : measures_readings) {
+                    integerFluxSink.next(integer);
+                }
 
-            List<Integer> measures_readings = get_measures_readings(); //don't change this line
+                integerFluxSink.complete();
+
+            })).subscribe();
         });
 
         //don't change code below
@@ -75,10 +77,16 @@ public class c8_Sinks extends SinksBase {
     @Test
     public void it_gets_crowded() {
         //todo: feel free to change code as you need
-        Flux<Integer> measurements = null;
-        submitOperation(() -> {
+        Flux<Integer> measurements = Flux.create(integerFluxSink -> {
+            Mono.fromRunnable(() -> submitOperation(() -> {
+                List<Integer> measures_readings = get_measures_readings(); //don't change this line
+                for (Integer integer : measures_readings) {
+                    integerFluxSink.next(integer);
+                }
 
-            List<Integer> measures_readings = get_measures_readings(); //don't change this line
+                integerFluxSink.complete();
+
+            })).subscribe();
         });
 
         //don't change code below
@@ -98,7 +106,7 @@ public class c8_Sinks extends SinksBase {
     @Test
     public void open_24_7() {
         //todo: set autoCancel parameter to prevent sink from closing
-        Sinks.Many<Integer> sink = Sinks.many().multicast().onBackpressureBuffer();
+        Sinks.Many<Integer> sink = Sinks.many().multicast().onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
         Flux<Integer> flux = sink.asFlux();
 
         //don't change code below
@@ -140,7 +148,7 @@ public class c8_Sinks extends SinksBase {
     @Test
     public void blue_jeans() {
         //todo: enable autoCancel parameter to prevent sink from closing
-        Sinks.Many<Integer> sink = Sinks.many().multicast().onBackpressureBuffer();
+        Sinks.Many<Integer> sink = Sinks.many().replay().all();
         Flux<Integer> flux = sink.asFlux();
 
         //don't change code below
@@ -187,7 +195,7 @@ public class c8_Sinks extends SinksBase {
 
         for (int i = 1; i <= 50; i++) {
             int finalI = i;
-            new Thread(() -> sink.tryEmitNext(finalI)).start();
+            new Thread(() -> sink.emitNext(finalI, (signalType, emitResult) -> true)).start();
         }
 
         //don't change code below
