@@ -1,11 +1,11 @@
-import org.junit.jupiter.api.*;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
-
-import java.time.Duration;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Often we might require state when working with complex streams. Reactor offers powerful context mechanism to share
@@ -32,7 +32,7 @@ public class c13_Context extends ContextBase {
      */
     public Mono<Message> messageHandler(String payload) {
         //todo: do your changes withing this method
-        return Mono.just(new Message("set correlation_id from context here", payload));
+        return Mono.deferContextual(contextView -> Mono.just(new Message(contextView.get(HTTP_CORRELATION_ID), payload)));
     }
 
     @Test
@@ -56,6 +56,8 @@ public class c13_Context extends ContextBase {
             ctx.get(AtomicInteger.class).incrementAndGet();
             return openConnection();
         });
+        AtomicInteger counter = new AtomicInteger(0);
+        repeat = repeat.contextWrite(context -> context.put(AtomicInteger.class, counter))
         //todo: change this line only
         ;
 
@@ -79,10 +81,16 @@ public class c13_Context extends ContextBase {
         AtomicInteger pageWithError = new AtomicInteger(); //todo: set this field when error occurs
 
         //todo: start from here
-        Flux<Integer> results = getPage(0)
+        AtomicInteger pageCounter = new AtomicInteger(-1);
+
+        Flux<Integer> results = Mono.defer(() -> getPage(pageCounter.incrementAndGet()))
                 .flatMapMany(Page::getResult)
                 .repeat(10)
-                .doOnNext(i -> System.out.println("Received: " + i));
+                .doOnNext(i -> System.out.println("Received: " + i))
+                .contextWrite(context -> context.put(AtomicInteger.class, pageWithError))
+                .doOnError(throwable -> pageWithError.set(pageCounter.get()))
+                .retry()
+                ;
 
 
         //don't change this code
